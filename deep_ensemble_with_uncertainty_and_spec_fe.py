@@ -562,6 +562,9 @@ print(f'y_train: dtype = {y_train.dtype}, shape = {y_train.shape}')
 common_preprocessor = build_preprocessor(X_train, df_train.drop(['fact_temperature', 'climate'], axis=1).columns)
 # %%
 print(common_preprocessor)
+
+
+
 # %%
 X_train = common_preprocessor.transform(X_train)
 num_features = X_train.shape[1]
