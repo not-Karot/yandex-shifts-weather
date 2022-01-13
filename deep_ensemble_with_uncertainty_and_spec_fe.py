@@ -8,9 +8,11 @@ import pickle
 import random
 import time
 from typing import List, Tuple, Union
+import xarray as xr
 
+# %%
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
+# %%
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import numpy as np
@@ -37,7 +39,7 @@ from assessment import calc_uncertainty_regection_curve, f_beta_metrics
 from uncertainty import ensemble_uncertainties_regression
 
 
-
+# %%
 class LossFunctionWrapper(tf.keras.losses.Loss):
     def __init__(self,
                  fn,
@@ -62,6 +64,7 @@ class LossFunctionWrapper(tf.keras.losses.Loss):
         return dict(list(base_config.items()) + list(config.items()))
 
 
+# %%
 def npairs_loss(labels, feature_vectors):
     feature_vectors_normalized = tf.math.l2_normalize(feature_vectors, axis=1)
     logits = tf.divide(
@@ -72,12 +75,16 @@ def npairs_loss(labels, feature_vectors):
     )
     return tfa.losses.npairs_loss(tf.squeeze(labels), logits)
 
+
+# %%
 class NPairsLoss(LossFunctionWrapper):
     def __init__(self, reduction=losses_utils.ReductionV2.AUTO,
                  name='m_pairs_loss'):
         super(NPairsLoss, self).__init__(npairs_loss, name=name,
                                          reduction=reduction)
 
+
+# %%
 def build_preprocessor(X: np.ndarray, colnames: List[str]) -> Pipeline:
     X_ = Pipeline(steps=[
         (
@@ -179,6 +186,7 @@ def build_preprocessor(X: np.ndarray, colnames: List[str]) -> Pipeline:
     return preprocessor.fit(X)
 
 
+# %%
 def reduce_dimensions_of_data(features: np.ndarray) -> np.ndarray:
     preprocessed_features = Pipeline(
         steps=[
@@ -243,7 +251,7 @@ def show_temperature(features: np.ndarray, targets: np.ndarray,
     else:
         plt.title(f'UMAP projections of weather data (temperature)')
     plt.colorbar()
-    plt.show()
+    #plt.show()
 
 
 # %%
@@ -412,7 +420,7 @@ def show_training_process(history: tf.keras.callbacks.History, metric_name: str,
     else:
         plt.title('Training process')
     plt.legend(loc='best')
-    plt.show()
+    #plt.show()
 
 
 # %%
@@ -528,43 +536,45 @@ np.random.seed(42)
 tf.random.set_seed(42)
 # %%
 data_dir = os.path.join('data', 'yandex-shifts', 'weather')
-#print(f'{data_dir} {os.path.isdir(data_dir)}')
+print(f'{data_dir} {os.path.isdir(data_dir)}')
 # %%
 model_dir = os.path.join('models', 'yandex-shifts', 'weather')
-#print(f'{model_dir} {os.path.isdir(model_dir)}')
+print(f'{model_dir} {os.path.isdir(model_dir)}')
 # %%
-traindata_name = os.path.join(data_dir, 'train.csv')
-#print(f'{traindata_name} {os.path.isfile(traindata_name)}')
+trainxdata_name = os.path.join(data_dir, 'x_train_cube.zarr')
+print(f'{trainxdata_name} {os.path.isfile(trainxdata_name)}')
+trainydata_name = os.path.join(data_dir, 'y_train_cube.zarr')
+print(f'{trainydata_name} {os.path.isfile(trainydata_name)}')
 # %%
-dev_in_name = os.path.join(data_dir, 'dev_in.csv')
-#print(f'{dev_in_name} {os.path.isfile(dev_in_name)}')
+dev_in_name = os.path.join(data_dir, 'x_val_cube.zarr')
+print(f'{dev_in_name} {os.path.isfile(dev_in_name)}')
 # %%
-dev_out_name = os.path.join(data_dir, 'dev_out.csv')
-#print(f'{dev_out_name} {os.path.isfile(dev_out_name)}')
+dev_out_name = os.path.join(data_dir, 'y_val_cube.zarr')
+print(f'{dev_out_name} {os.path.isfile(dev_out_name)}')
 # %%
-eval_name = os.path.join(data_dir, 'eval_in.csv')
-#print(f'{eval_name} {os.path.isfile(eval_name)}')
+eval_name = os.path.join(data_dir, 'x_test_cube.zarr')
+print(f'{eval_name} {os.path.isfile(eval_name)}')
 # %%
-df_train = pd.read_csv(traindata_name)
-#print(f'Row number is {df_train.shape[0]}.')
-#print(f'Column number is {df_train.shape[1]}.')
+df_train_x = xr.open_zarr(trainxdata_name).to_dataframe().fillna(0)  # .to_numpy().astype(np.float64)
+df_train_y = xr.open_zarr(trainydata_name).to_dataframe().fillna(0)  # .to_numpy().astype(np.float64)
 # %%
-#df_train.head()
+X_train = df_train_x.to_numpy().astype(np.float64)
+y_train = df_train_y.to_numpy().astype(np.float64)
 # %%
-X_train = df_train.drop(['fact_temperature', 'climate'], axis=1).to_numpy().astype(np.float64)
-y_train = df_train['fact_temperature'].to_numpy().astype(np.float64)
-
-
+y_train = y_train[:, 1:2]
+# %%
+y_train = y_train.ravel()
+# %%
+xr.open_zarr(trainydata_name).to_dataframe().dropna()
 # %%
 print(f'X_train: dtype = {X_train.dtype}, shape = {X_train.shape}')
 print(f'y_train: dtype = {y_train.dtype}, shape = {y_train.shape}')
 # %%
-common_preprocessor = build_preprocessor(X_train, df_train.drop(['fact_temperature', 'climate'], axis=1).columns)
+X_train
+# %%
+common_preprocessor = build_preprocessor(X_train, df_train_x.columns)
 # %%
 print(common_preprocessor)
-
-
-
 # %%
 X_train = common_preprocessor.transform(X_train)
 num_features = X_train.shape[1]
@@ -588,8 +598,6 @@ indices_for_projections = random.sample(
     k=100000
 )
 X_train_prj = reduce_dimensions_of_data(X_train[indices_for_projections])
-# %%
-X_train
 # %%
 show_temperature(X_train_prj, y_train[indices_for_projections],
                  figure_id=0)
@@ -617,9 +625,9 @@ print('They are:')
 for temperature_val in dict_of_classes:
     class_idx = dict_of_classes[temperature_val]
     print('  Class {0:>2}: temperature = {1:4.1f}'.format(class_idx, temperature_val))
-y_train_class = np.empty(y_train.shape, dtype=np.int32)
+y_train_class = np.empty(y_train.shape, dtype=np.int64)
 for sample_idx in range(y_train.shape[0]):
-    temperature_val = int(round(y_train[sample_idx]))
+    temperature_val = int((y_train[sample_idx]))
     if temperature_val in dict_of_classes:
         class_idx = dict_of_classes[temperature_val]
     else:
@@ -632,7 +640,7 @@ for sample_idx in range(y_train.shape[0]):
 print(f'X_train: dtype = {X_train.dtype}, shape = {X_train.shape}')
 print(f'y_train: dtype = {y_train.dtype}, shape = {y_train.shape}')
 # %%
-skf = StratifiedKFold(n_splits=20, shuffle=True, random_state=42)
+skf = StratifiedKFold(n_splits=2, shuffle=True, random_state=42)
 splitter = skf.split(X_train, y_train_class)
 splits = [(train_index, test_index) for train_index, test_index in splitter]
 del splitter, skf
@@ -766,26 +774,27 @@ postprocessing_name = os.path.join(model_dir, 'postprocessing_scalers.pkl')
 with open(postprocessing_name, 'wb') as fp:
     pickle.dump(postprocessing_scalers, fp, protocol=pickle.HIGHEST_PROTOCOL)
 # %%
-df_in = pd.read_csv(dev_in_name)
+df_in = xr.open_zarr(dev_in_name).to_dataframe().fillna(0)  # pd.read_csv(dev_in_name)
 print(f'Row number is {df_in.shape[0]}.')
 print(f'Column number is {df_in.shape[1]}.')
 # %%
-df_in.head()
-# %%
-df_out = pd.read_csv(dev_out_name)
+df_out = xr.open_zarr(dev_out_name).to_dataframe().fillna(0)  # pd.read_csv(dev_out_name)
 print(f'Row number is {df_out.shape[0]}.')
 print(f'Column number is {df_out.shape[1]}.')
 # %%
-df_out.head()
-# %%
-inputs = np.vstack([
-    df_in.iloc[:, 6:].to_numpy().astype(np.float64),
-    df_out.iloc[:, 6:].to_numpy().astype(np.float64)
+'''inputs = np.vstack([
+    df_in.to_numpy().astype(np.float64),
+    df_out.to_numpy().astype(np.float64)
 ])
 targets = np.concatenate([
     df_in['fact_temperature'].to_numpy().astype(np.float64),
     df_out['fact_temperature'].to_numpy().astype(np.float64)
-])
+])'''
+# %%
+inputs = df_in.to_numpy().astype(np.float64)
+targets = df_out.to_numpy().astype(np.float64)
+targets = targets[:, 1:2]
+targets = targets.ravel()
 # %%
 all_preds = predict_by_ensemble(
     input_data=inputs,
@@ -813,7 +822,7 @@ new_figure_id += 1
 plt.plot(retention_fractions, retention_mse)
 plt.ylabel('MSE')
 plt.xlabel('Retention Fraction')
-plt.show()
+#plt.show()
 plt.clf()
 # %%
 thresh = 1.0
@@ -826,7 +835,7 @@ new_figure_id += 1
 plt.plot(retention_fractions, retention_f1)
 plt.ylabel('F1')
 plt.xlabel('Retention Fraction')
-plt.show()
+#plt.show()
 plt.clf()
 # %%
 ids = np.arange(1, inputs.shape[0] + 1)
@@ -837,13 +846,12 @@ df_submission = pd.DataFrame(data={
     'UNCERTAINTY': uncertainties
 })
 # %%
-df_submission.head()
+#df_submission.head()
 # %%
 out_file = os.path.join(model_dir, 'df_submission_dev.csv')
 df_submission.to_csv(out_file, index=False)
 # %%
-df_eval = pd.read_csv(eval_name)
-df_eval.head()
+df_eval = xr.open_zarr(eval_name).to_dataframe().fillna(0)
 # %%
 eval_inputs = df_eval.to_numpy().astype(np.float64)
 # %%
@@ -865,7 +873,7 @@ df_submission = pd.DataFrame(data={
     'PRED': preds,
     'UNCERTAINTY': uncertainties
 })
-df_submission.head()
+#df_submission.head()
 # %%
 out_file = os.path.join(model_dir, 'df_submission.csv')
 df_submission.to_csv(out_file, index=False)
